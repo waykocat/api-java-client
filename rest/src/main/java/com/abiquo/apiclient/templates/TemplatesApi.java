@@ -23,6 +23,7 @@ import java.util.concurrent.TimeUnit;
 
 import com.abiquo.apiclient.RestClient;
 import com.abiquo.apiclient.domain.options.TemplateListOptions;
+import com.abiquo.model.rest.RESTLink;
 import com.abiquo.model.transport.AcceptedRequestDto;
 import com.abiquo.server.core.appslibrary.DatacenterRepositoryDto;
 import com.abiquo.server.core.appslibrary.VirtualMachineTemplateDto;
@@ -149,10 +150,23 @@ public class TemplatesApi
         VirtualMachineTemplatePersistentDto persistentTemplateDto =
             new VirtualMachineTemplatePersistentDto();
         persistentTemplateDto.setPersistentTemplateName(persistentTemplateName);
-        persistentTemplateDto.setPersistentVolumeName(persistentTemplateDto
-            .getPersistentTemplateName());
-        persistentTemplateDto.addLink(create("tier", tier.searchLink("self").getHref(), tier
-            .searchLink("self").getType()));
+        // persistentTemplateDto.setPersistentVolumeName(persistentTemplateName);
+
+        for (RESTLink l : vmt.getLinks())
+        {
+            if (l.getRel().startsWith("disk") && !l.getRel().equalsIgnoreCase("disks"))
+            {
+                Integer seq = Integer.valueOf(l.getRel().substring("disk".length()));
+
+                persistentTemplateDto.addLink(l);
+                RESTLink tierOfDisk =
+                    create("tier" + seq, tier.searchLink("self").getHref(), tier.searchLink("self")
+                        .getType());
+                // tierOfDisk.setTitle(persistentTemplateName);
+                persistentTemplateDto.addLink(tierOfDisk);
+            }
+        }
+
         persistentTemplateDto.addLink(create("virtualdatacenter", vdc.getEditLink().getHref(), vdc
             .getEditLink().getType()));
         persistentTemplateDto.addLink(create("virtualmachinetemplate", vmt.getEditLink().getHref(),
@@ -172,12 +186,18 @@ public class TemplatesApi
             throw new RuntimeException("Persistent operation failed");
         }
 
-        return client.get(task.searchLink("result").getHref(),
+        return client.get(task.searchLink("parent").getHref(),
             VirtualMachineTemplateDto.MEDIA_TYPE, VirtualMachineTemplateDto.class);
     }
 
     public Iterable<TaskDto> getVirtualMachineTemplateTasks(final VirtualMachineTemplateDto vmt)
     {
         return client.list(vmt.searchLink("tasks").getHref(), TasksDto.MEDIA_TYPE, TasksDto.class);
+    }
+
+    public VirtualMachineTemplateDto waitProgress(final VirtualMachineTemplateDto vmt,
+        final int pollInterval, final int maxWait, final TimeUnit timeUnit)
+    {
+        return client.waitProgress(vmt, pollInterval, maxWait, timeUnit);
     }
 }
